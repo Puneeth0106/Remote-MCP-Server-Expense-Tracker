@@ -35,7 +35,7 @@ def get_db_connection():
     return conn
 
 
-# 3. Tools With Data Governance
+# 3. Tools remoith Data Governance
 
 ## Tool-1: Adding expense according to the user
 @mcp.tool()
