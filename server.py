@@ -1,54 +1,53 @@
 import os
-import time
-import psycopg2 #PostgreSQL database adapter for Python
-from psycopg2.extras import RealDictCursor # For returning a python dictionary
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.auth.providers.github import GitHubProvider
 from fastmcp.server.dependencies import get_access_token
+from typing import Optional
 
-load_dotenv()  # Load environment variables from .env file
+load_dotenv()
 
-DB_URL= os.getenv("DATABASE_URL")
-CATEGORIES_PATH= os.path.join(os.path.dirname(__file__),"categories.json")
+# Configuration from Environment
+DB_URL = os.getenv("DATABASE_URL")
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
-
 BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
 JWT_KEY = os.getenv("JWT_SIGNING_KEY")
+CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "categories.json")
 
-# 1. SetUp Authentication
+# 1. Setup Authentication
 auth_provider = GitHubProvider(
     client_id=GITHUB_CLIENT_ID,
-    client_secret= GITHUB_CLIENT_SECRET,
+    client_secret=GITHUB_CLIENT_SECRET,
     base_url=BASE_URL,
-    jwt_signing_key= JWT_KEY)
+    jwt_signing_key=JWT_KEY
+)
 
+mcp = FastMCP("Cloud-Expense-Tracker", auth=auth_provider)
 
-mcp= FastMCP("Cloud-Expense-Tracker", auth=auth_provider)
-
-
-# 2. Database Connection
+# 2. Database Connection Helper
 def get_db_connection():
-    """ Establish connection to the Cloud postgres DB(Supabase)"""
-    conn= psycopg2.connect(DB_URL, cursor_factory= RealDictCursor )
-    return conn
+    return psycopg2.connect(DB_URL, cursor_factory=RealDictCursor)
 
-
-# 3. Tools remoith Data Governance
-
-## Tool-1: Adding expense according to the user
-@mcp.tool()
-def add_expense(date, amount: float, category : str, subcategory='',note=''):
-    """Add a new expense. Automatically linked to your secure GitHub identity."""
-    # SECURITY: Get the user identity from the token
+# Helper to get user and handle errors centrally
+def get_current_user():
     try:
-        token= get_access_token()
-        current_user= token.claims.get("login")
+        token = get_access_token()
+        return token.claims.get("login")
     except Exception:
-        raise "Error: Your not logged in. Please Authenticate"
-    
-    # DATABASE : Insert with Strict user_id
+        return None
+
+# --- TOOLS ---
+
+@mcp.tool()
+def add_expense(date: str, amount: float, category: str, subcategory: str = '', note: str = ''):
+    """Add a new expense. Automatically linked to your GitHub identity."""
+    current_user = get_current_user()
+    if not current_user:
+        return "Error: You are not logged in. Please authenticate via the login URL."
+
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -58,175 +57,114 @@ def add_expense(date, amount: float, category : str, subcategory='',note=''):
                     VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (current_user,date,amount,category,subcategory,note)
+                    (current_user, date, amount, category, subcategory, note)
                 )
-                new_id= cur.fetchone()['id']
+                new_id = cur.fetchone()['id']
                 conn.commit()
-                return f'Expense added successfully. ID : {new_id}'
+                return f'Expense added successfully. ID: {new_id}'
     except Exception as e:
         return f"Database error: {str(e)}"
 
-## Tool-2: List expenses of the user
 @mcp.tool()
 def list_expenses(start_date: str, end_date: str):
-    """ List only your expense"""
+    """List only your expenses within a date range."""
+    current_user = get_current_user()
+    if not current_user:
+        return "Error: You are not logged in."
 
-    # SECURITY: Get the user identity from the token
-    try:
-        token= get_access_token()
-        current_user= token.claims.get("login")
-    except Exception:
-        raise "Error: Your not logged in. Please Authenticate"
-
-
-    # DATA GOVERNANCE: Row-Level Security
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """
-                    select * from expenses
-                    where user_id= %s and
-                    date between %s and %s
-                    order by date asc
-                    """,
-                    (current_user,start_date,end_date)
+                    "SELECT * FROM expenses WHERE user_id = %s AND date BETWEEN %s AND %s ORDER BY date ASC",
+                    (current_user, start_date, end_date)
                 )
-                rows= cur.fetchall()
-                if not rows:
-                    return f"No expenses found for user {current_user}."
-                return str(rows)
+                rows = cur.fetchall()
+                return str(rows) if rows else f"No expenses found for {current_user}."
     except Exception as e:
         return f"Database error: {str(e)}"
 
-
-
-### Tool-3: Summarize expenses of the user
 @mcp.tool()
-def summarize_expenses(start_date: str, end_date: str, category: str = None):
-    """ Summarize your expenses with optional category filter"""
-
-    # SECURITY: Get the user identity from the token
-    try:
-        token= get_access_token()
-        current_user= token.claims.get("login")
-    except Exception:
-        raise "Error: Your not logged in. Please Authenticate"
+def summarize_expenses(start_date: str, end_date: str, category: Optional[str] = None):
+    """Summarize your expenses with optional category filter."""
+    current_user = get_current_user()
+    if not current_user:
+        return "Error: You are not logged in."
     
-    # DATA GOVERNANCE: Row-Level Security with optional category filter
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                query= """
-                    select category, sum(amount) as total_amount
-                    from expenses
-                    where user_id= %s and date between %s and %s
+                query = """
+                    SELECT category, SUM(amount) as total_amount
+                    FROM expenses
+                    WHERE user_id = %s AND date BETWEEN %s AND %s
                 """
-                parameters= [current_user, start_date, end_date]
+                params = [current_user, start_date, end_date]
                 if category:
-                    query += " and category= %s"
-                    parameters.append(category)
-                query += " group by category order by category asc"
+                    query += " AND category = %s"
+                    params.append(category)
+                query += " GROUP BY category ORDER BY category ASC"
                 
-                cur.execute(query, parameters)
-                rows= cur.fetchall()
-                if not rows:
-                    return f"No expenses found for user {current_user}."
-                return str(rows)
+                cur.execute(query, params)
+                rows = cur.fetchall()
+                return str(rows) if rows else "No expenses found."
     except Exception as e:
         return f"Database error: {str(e)}"
-    
 
-### Tool-4: Delete expense of the user
 @mcp.tool()
 def delete_expense(expense_id: int):
-    """ Delete your expense by ID """
-    # SECURITY: Get the user identity from the token
-    try:
-        token= get_access_token()
-        current_user= token.claims.get("login")
-    except Exception:
-        raise "Error: Your not logged in. Please Authenticate"
-    
+    """Delete your expense by ID."""
+    current_user = get_current_user()
+    if not current_user:
+        return "Error: You are not logged in."
 
-    # DATA GOVERNANCE: Row-Level Security on Delete
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    DELETE FROM expenses
-                    WHERE id= %s AND user_id= %s
-                    """,
-                    (expense_id, current_user)
-                )
-                if cur.rowcount==0:
-                    return f"Expense ID {expense_id} not found for user {current_user}."
+                cur.execute("DELETE FROM expenses WHERE id = %s AND user_id = %s", (expense_id, current_user))
+                if cur.rowcount == 0:
+                    return f"Expense ID {expense_id} not found or access denied."
                 conn.commit()
                 return f"Expense ID {expense_id} deleted successfully."
     except Exception as e:
         return f"Database error: {str(e)}"
-    
 
-## Tool-5: Upload Expense Categories Resource
 @mcp.tool()
-def update_expense(expense_id: int, date=None, amount: float = None, category: str = None, subcategory: str = None, note: str = None):
-    """ Update your expense by ID with provided fields """
-    # SECURITY: Get the user identity from the token
-    try:
-        token= get_access_token()
-        current_user= token.claims.get("login")
-    except Exception:
-        raise "Error: Your not logged in. Please Authenticate"
-    # DATA GOVERNANCE: Row-Level Security on Update
+def update_expense(expense_id: int, date: str = None, amount: float = None, category: str = None, subcategory: str = None, note: str = None):
+    """Update your expense by ID with provided fields."""
+    current_user = get_current_user()
+    if not current_user:
+        return "Error: You are not logged in."
+
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                fields_to_update= []
-                params= []
+                fields = []
+                params = []
+                if date: fields.append("date = %s"); params.append(date)
+                if amount: fields.append("amount = %s"); params.append(amount)
+                if category: fields.append("category = %s"); params.append(category)
+                if subcategory: fields.append("subcategory = %s"); params.append(subcategory)
+                if note: fields.append("note = %s"); params.append(note)
 
-                if date is not None:
-                    fields_to_update.append("date = %s")
-                    params.append(date)
-                if amount is not None:
-                    fields_to_update.append("amount = %s")
-                    params.append(amount)
-                if category is not None:
-                    fields_to_update.append("category = %s")
-                    params.append(category)
-                if subcategory is not None:
-                    fields_to_update.append("subcategory = %s")
-                    params.append(subcategory)
-                if note is not None:
-                    fields_to_update.append("note = %s")
-                    params.append(note)
+                if not fields: return "No fields provided for update."
 
-                if not fields_to_update:
-                    return "No fields provided for update."
-
-                query= f"""
-                    UPDATE expenses
-                    SET {', '.join(fields_to_update)}
-                    WHERE id= %s AND user_id= %s
-                """
+                query = f"UPDATE expenses SET {', '.join(fields)} WHERE id = %s AND user_id = %s"
                 params.extend([expense_id, current_user])
-
                 cur.execute(query, params)
-                if cur.rowcount==0:
-                    return f"Expense ID {expense_id} not found for user {current_user}."
+                if cur.rowcount == 0:
+                    return f"Expense ID {expense_id} not found or access denied."
                 conn.commit()
                 return f"Expense ID {expense_id} updated successfully."
     except Exception as e:
         return f"Database error: {str(e)}"
-    
 
-@mcp.resource("expense://categories",mime_type="application/json")
-# expense://categories - MCP URI, mime_type="application/json" - Tells AI about what type of content you can expect
+@mcp.resource("expense://categories", mime_type="application/json")
 def categories():
-    # Read fresh each time so you can edit the file without restarting
+    if not os.path.exists(CATEGORIES_PATH):
+        return '["Food", "Travel", "Bills", "Other"]'
     with open(CATEGORIES_PATH, 'r') as f:
         return f.read()
 
-
-if __name__=="__main__":
-    mcp.run(transport="http", host="0.0.0.0", port=8000)
+if __name__ == "__main__":
+    mcp.run(transport="transport", host="0.0.0.0", port=8000)
