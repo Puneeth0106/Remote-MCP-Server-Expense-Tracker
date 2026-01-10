@@ -25,7 +25,7 @@ auth_provider = GitHubProvider(
     jwt_signing_key=JWT_KEY
 )
 
-mcp = FastMCP("Cloud-Expense-Tracker", auth=auth_provider)
+mcp = FastMCP("Cloud-Expense-Tracker", auth="github")
 
 # 2. Database Connection Helper
 def get_db_connection():
