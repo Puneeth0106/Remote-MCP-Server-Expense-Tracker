@@ -9,21 +9,25 @@ from typing import Optional
 
 load_dotenv()
 
-# Configuration from Environment
-DB_URL = os.getenv("DATABASE_URL")
-GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
-GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
-BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
-JWT_KEY = os.getenv("JWT_SIGNING_KEY")
-CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "categories.json")
+# # Configuration from Environment
+# DB_URL = os.getenv("DATABASE_URL")
+# GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+# GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+# BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
+# JWT_KEY = os.getenv("JWT_SIGNING_KEY")
+# CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "categories.json")
 
-# 1. Setup Authentication
-auth_provider = GitHubProvider(
-    client_id=GITHUB_CLIENT_ID,
-    client_secret=GITHUB_CLIENT_SECRET,
-    base_url=BASE_URL,
-    jwt_signing_key=JWT_KEY
-)
+# # 1. Setup Authentication
+# auth_provider = GitHubProvider(
+#     client_id=GITHUB_CLIENT_ID,
+#     client_secret=GITHUB_CLIENT_SECRET,
+#     base_url=BASE_URL,
+#     jwt_signing_key=JWT_KEY
+# )
+ 
+#Note:  NO GitHubProvider import needed! because FastMCP cloud handles it internally now.
+#Note:  NO manual auth_provider setup needed! because FastMCP cloud handles it internally.
+
 
 mcp = FastMCP("Cloud-Expense-Tracker", auth="github")
 
