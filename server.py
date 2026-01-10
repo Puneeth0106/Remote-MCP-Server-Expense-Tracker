@@ -1,7 +1,5 @@
 import os
-import requests
 import time
-import webbrowser #Lets your Python script talk to your computer's default web browser.
 import psycopg2 #PostgreSQL database adapter for Python
 from psycopg2.extras import RealDictCursor # For returning a python dictionary
 from dotenv import load_dotenv
@@ -21,13 +19,13 @@ JWT_KEY = os.getenv("JWT_SIGNING_KEY")
 
 # 1. SetUp Authentication
 auth_provider = GitHubProvider(
-    client_id=os.getenv("GITHUB_CLIENT_ID"),
-    client_secret= os.getenv("GITHUB_CLIENT_SECRET"),
-    base_url=os.getenv("APP_BASE_URL", "http://localhost:8000"),
-    jwt_signing_key= os.getenv("JWT_SIGNING_KEY")
-)
+    client_id=GITHUB_CLIENT_ID,
+    client_secret= GITHUB_CLIENT_SECRET,
+    base_url=BASE_URL,
+    jwt_signing_key= JWT_KEY)
 
-mcp= FastMCP("Cloud-Expense-Tracker")
+
+mcp= FastMCP("Cloud-Expense-Tracker", auth=auth_provider)
 
 
 # 2. Database Connection
