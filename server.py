@@ -28,8 +28,12 @@ load_dotenv()
 #Note:  NO GitHubProvider import needed! because FastMCP cloud handles it internally now.
 #Note:  NO manual auth_provider setup needed! because FastMCP cloud handles it internally.
 
+# 1. Initialize the provider WITHOUT arguments
+# FastMCP 2.x will look for FASTMCP_SERVER_AUTH_GITHUB_... in the environment automatically
+auth_provider = GitHubProvider()
 
-mcp = FastMCP("Cloud-Expense-Tracker", auth="github")
+
+mcp = FastMCP("Cloud-Expense-Tracker", auth=auth_provider)
 
 # 2. Database Connection Helper
 def get_db_connection():
