@@ -17,20 +17,22 @@ load_dotenv()
 # JWT_KEY = os.getenv("JWT_SIGNING_KEY")
 # CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "categories.json")
 
-# # 1. Setup Authentication
-# auth_provider = GitHubProvider(
-#     client_id=GITHUB_CLIENT_ID,
-#     client_secret=GITHUB_CLIENT_SECRET,
-#     base_url=BASE_URL,
-#     jwt_signing_key=JWT_KEY
-# )
- 
-#Note:  NO GitHubProvider import needed! because FastMCP cloud handles it internally now.
-#Note:  NO manual auth_provider setup needed! because FastMCP cloud handles it internally.
+# 1. Pull variables with fallback to Dashboard names
+GITHUB_ID = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_CLIENT_ID")
+GITHUB_SECRET = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET")
+# IMPORTANT: base_url must NOT include the /mcp part for the provider logic
+ROOT_URL = "https://cloud-expense-server.fastmcp.app" 
+JWT_KEY = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_JWT_SIGNING_KEY")
 
-# 1. Initialize the provider WITHOUT arguments
-# FastMCP 2.x will look for FASTMCP_SERVER_AUTH_GITHUB_... in the environment automatically
-auth_provider = GitHubProvider()
+# 2. Configure the provider to be "Path Aware"
+auth_provider = GitHubProvider(
+    client_id=GITHUB_ID,
+    client_secret=GITHUB_SECRET,
+    base_url=ROOT_URL,
+    # This tells the server: "I am actually living inside /mcp"
+    issuer_url=f"{ROOT_URL}/mcp", 
+    jwt_signing_key=JWT_KEY
+)
 
 
 mcp = FastMCP("Cloud-Expense-Tracker", auth=auth_provider)
