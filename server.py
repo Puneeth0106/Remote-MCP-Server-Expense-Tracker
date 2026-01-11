@@ -10,12 +10,12 @@ from typing import Optional
 load_dotenv()
 
 # # Configuration from Environment
-# DB_URL = os.getenv("DATABASE_URL")
+DB_URL = os.getenv("DATABASE_URL")
 # GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 # GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 # BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
 # JWT_KEY = os.getenv("JWT_SIGNING_KEY")
-# CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "categories.json")
+CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "categories.json")
 
 # 1. Pull variables with fallback to Dashboard names
 GITHUB_ID = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_CLIENT_ID")
@@ -177,4 +177,4 @@ def categories():
         return f.read()
 
 if __name__ == "__main__":
-    mcp.run(transport="transport", host="0.0.0.0", port=8000)
+    mcp.run(transport="http", host="0.0.0.0", port=8000)
