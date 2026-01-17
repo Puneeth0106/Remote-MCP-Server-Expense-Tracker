@@ -9,12 +9,8 @@ from typing import Optional
 
 load_dotenv()
 
-# # Configuration from Environment
+#  Configuration from Environment
 DB_URL = os.getenv("DATABASE_URL")
-# GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
-# GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
-# BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
-# JWT_KEY = os.getenv("JWT_SIGNING_KEY")
 CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "categories.json")
 
 # 1. Pull variables with fallback to Dashboard names
@@ -22,16 +18,16 @@ GITHUB_ID = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_CLIENT_ID")
 GITHUB_SECRET = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_CLIENT_SECRET")
 # IMPORTANT: base_url must NOT include the /mcp part for the provider logic
 ROOT_URL = "https://cloud-expense-server.fastmcp.app" 
-JWT_KEY = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_JWT_SIGNING_KEY")
+#JWT_KEY = os.getenv("FASTMCP_SERVER_AUTH_GITHUB_JWT_SIGNING_KEY")
 
 # 2. Configure the provider to be "Path Aware"
 auth_provider = GitHubProvider(
     client_id=GITHUB_ID,
     client_secret=GITHUB_SECRET,
-    base_url=ROOT_URL,
+    base_url="http://localhost:8000"
     # This tells the server: "I am actually living inside /mcp"
-    issuer_url=f"{ROOT_URL}/mcp", 
-    jwt_signing_key=JWT_KEY
+    # base_url=f"{ROOT_URL}/mcp", 
+    # jwt_signing_key=JWT_KEY
 )
 
 
@@ -43,6 +39,7 @@ def get_db_connection():
 
 # Helper to get user and handle errors centrally
 def get_current_user():
+    from fastmcp.server.dependencies import get_access_token
     try:
         token = get_access_token()
         return token.claims.get("login")
@@ -177,4 +174,4 @@ def categories():
         return f.read()
 
 if __name__ == "__main__":
-    mcp.run(transport="sse", host="0.0.0.0", port=8080)
+    mcp.run(transport="http", host="0.0.0.0", port=8000)
