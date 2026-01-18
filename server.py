@@ -7,6 +7,8 @@ from fastmcp import FastMCP
 from contextlib import contextmanager
 
 
+
+
 # 1. Load Environment & Config
 load_dotenv()
 DB_URL = os.getenv("DATABASE_URL")
@@ -16,6 +18,9 @@ mcp = FastMCP("Expense-Tracker")
 
 # 2. Initialize Connection Pool 
 # This prevents opening/closing a handshake for every single request
+# Global variable to capture why the connection failed
+STARTUP_ERROR = None
+
 try:
     db_pool = psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
@@ -24,23 +29,24 @@ try:
         cursor_factory=RealDictCursor
     )
 except Exception as e:
-    print(f"Error creating connection pool: {e}")
+    # CAPTURE the error string so we can show it in the tool output later
+    STARTUP_ERROR = f"Detailed Startup Error: {str(e)}"
+    print(STARTUP_ERROR) # Keep printing for logs
     db_pool = None
 
 @contextmanager
 def get_db_connection():
-    """
-    Context manager to get a connection from the pool and return it safely.
-    This ensures connections are never leaked, even if code crashes.
-    """
+    # Check for startup error first
+    if STARTUP_ERROR:
+        raise Exception(STARTUP_ERROR)
+    
     if not db_pool:
-        raise Exception("Database pool is not initialized.")
+        raise Exception("Database pool is not initialized (Unknown Reason).")
     
     conn = db_pool.getconn()
     try:
         yield conn
     finally:
-        # Put the connection back in the pool so others can use it
         db_pool.putconn(conn)
 
 
