@@ -16,57 +16,60 @@ CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "resources/categories.
 # Initialize FastMCP
 mcp = FastMCP("Expense-Tracker")
 
+# Global variable to store why the connection failed
+STARTUP_ERROR = None
+db_pool = None
 
-# 2. Initialize Connection Pool (Production Ready)
+# 2. Initialize Connection Pool
 try:
-    # A. Get the raw variable
     raw_url = os.getenv("DATABASE_URL")
     
-    # B. CLEAN IT: Remove whitespace and quotes (Standardize the string)
+    # Clean and Validate URL
     if raw_url:
         DB_URL = raw_url.strip().strip("'").strip('"')
     else:
         DB_URL = None
 
-    # C. FORCE SSL: Supabase REQUIRES this. 
-    # If we don't add it, the connection drops silently (Empty OperationalError).
-    if DB_URL and "sslmode" not in DB_URL:
-        # Check if URL already has query parameters (?)
+    if not DB_URL:
+        raise ValueError("DATABASE_URL environment variable is missing or empty.")
+
+    # Force SSL for Supabase
+    if "sslmode" not in DB_URL:
         separator = "&" if "?" in DB_URL else "?"
         DB_URL = f"{DB_URL}{separator}sslmode=require"
 
-    # D. Create the Pool
+    # Create Pool
     db_pool = psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
         maxconn=20,
         dsn=DB_URL,
         cursor_factory=RealDictCursor
     )
-    print("Database pool initialized successfully with SSL.")
+    print("Database pool initialized successfully.")
 
 except Exception as e:
-    # If it still fails, print the modified URL (masked) to see if SSL was added
-    masked_url = DB_URL.replace(DB_URL.split(':')[2].split('@')[0], '******') if DB_URL and '@' in DB_URL else "INVALID_URL"
-    print(f"Startup Failed. Final URL used: {masked_url}")
-    print(f"Error: {e}")
+    # CAPTURE the specific error so we can show it to the user
+    STARTUP_ERROR = f"Startup Failed: {str(e)}"
+    print(STARTUP_ERROR) # Print to logs too
     db_pool = None
-
 
 @contextmanager
 def get_db_connection():
     """
     Context manager to get a connection from the pool and return it safely.
     """
-    # 1. Check if the pool exists (it might be None if startup failed)
+    # 1. Check if we have a specific startup error to report
+    if STARTUP_ERROR:
+        raise Exception(f"DATABASE ERROR: {STARTUP_ERROR}")
+
+    # 2. Check if pool is missing for unknown reasons
     if not db_pool:
-        raise Exception("Database connection pool is not initialized. Please check server logs for startup errors.")
+        raise Exception("Database pool is not initialized (Unknown Reason).")
     
-    # 2. Get a connection
     conn = db_pool.getconn()
     try:
         yield conn
     finally:
-        # 3. ALWAYS return the connection to the pool, even if code crashes
         db_pool.putconn(conn)
 
 # 3. Helper to get user and handle errors centrally
