@@ -51,6 +51,24 @@ except Exception as e:
     print(f"Error: {e}")
     db_pool = None
 
+
+@contextmanager
+def get_db_connection():
+    """
+    Context manager to get a connection from the pool and return it safely.
+    """
+    # 1. Check if the pool exists (it might be None if startup failed)
+    if not db_pool:
+        raise Exception("Database connection pool is not initialized. Please check server logs for startup errors.")
+    
+    # 2. Get a connection
+    conn = db_pool.getconn()
+    try:
+        yield conn
+    finally:
+        # 3. ALWAYS return the connection to the pool, even if code crashes
+        db_pool.putconn(conn)
+
 # 3. Helper to get user and handle errors centrally
 def ensure_user_identity(user_id):
     """
@@ -66,7 +84,12 @@ def ensure_user_identity(user_id):
 @mcp.tool()
 def add_expense(date: str, amount: float, category: str, subcategory: str = '', note: str = '', user_id: str = 'guest'):
     """Add a new expense. User ID defaults to guest."""
+
+    # 1. Check Identity
     identity_error = ensure_user_identity(user_id)
+    if identity_error:
+        return identity_error  
+    
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -88,7 +111,12 @@ def add_expense(date: str, amount: float, category: str, subcategory: str = '', 
 @mcp.tool()
 def list_expenses(start_date: str, end_date: str, user_id: str = 'guest'):
     """List expenses for a specific date range."""
+
+    # 1. Check Identity
     identity_error = ensure_user_identity(user_id)
+    if identity_error:
+        return identity_error
+    
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -115,7 +143,11 @@ def summarize_expenses(start_date: str, end_date: str, category: str | None = No
     """
     Summarize expenses with optional category filter.
     """
+    # 1. Check Identity
     identity_error = ensure_user_identity(user_id)
+    if identity_error:
+        return identity_error
+    
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -145,7 +177,11 @@ def summarize_expenses(start_date: str, end_date: str, category: str | None = No
 @mcp.tool()
 def delete_expense(expense_id: int, user_id: str = 'guest'):
     """Delete an expense by ID."""
+    # 1. Check Identity
     identity_error = ensure_user_identity(user_id)
+    if identity_error:
+        return identity_error
+    
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -184,7 +220,10 @@ def update_expense(
     Update an expense by ID.
     Only fields that are provided will be updated.
     """
+    # 1. Check Identity
     identity_error = ensure_user_identity(user_id)
+    if identity_error:
+        return identity_error
     try:
         # 1. Clean up inputs (remove accidentally added quotes)
         date = clean_input(date)
