@@ -34,32 +34,60 @@ mcp = FastMCP("Expense-Tracker")
 
 
 
-# 2. Initialize Connection Pool 
-# This prevents opening/closing a handshake for every single request
-# Global variable to capture why the connection failed
+# ... inside your python file ...
+
+# 2. Initialize Connection Pool (Diagnostic Mode)
 STARTUP_ERROR = None
+db_pool = None
 
 try:
+    # DEBUG: Check if the variable even exists
+    raw_url = os.getenv("DATABASE_URL")
+    
+    # Validation Logging (Safe - masks the password)
+    if raw_url is None:
+        debug_msg = "DB_URL is NONE (Environment variable not found)"
+    elif raw_url.strip() == "":
+        debug_msg = "DB_URL is Empty String"
+    else:
+        # Show first 15 chars to verify protocol (e.g. 'postgres://...')
+        # and last 15 to verify database name, masking the middle (password)
+        safe_preview = f"{raw_url[:15]}...{raw_url[-15:]}" if len(raw_url) > 30 else "URL_TOO_SHORT"
+        debug_msg = f"DB_URL seems present: {safe_preview}"
+
+    # Clean the URL
+    if raw_url:
+        DB_URL = raw_url.strip().strip("'").strip('"')
+    else:
+        DB_URL = None
+
+    if not DB_URL:
+        raise ValueError(f"CRITICAL: Database URL is missing. Debug info: {debug_msg}")
+
+    # Attempt Connection
     db_pool = psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
         maxconn=20,
         dsn=DB_URL,
         cursor_factory=RealDictCursor
     )
+
 except Exception as e:
-    # CAPTURE the error string so we can show it in the tool output later
-    STARTUP_ERROR = f"Detailed Startup Error: {str(e)}"
-    print(STARTUP_ERROR) # Keep printing for logs
+    # Capture EVERYTHING: Type, Message, and Repr
+    import traceback
+    tb = traceback.format_exc()
+    STARTUP_ERROR = f"DIAGNOSTIC FAILURE:\nType: {type(e).__name__}\nMessage: '{str(e)}'\nDebug Info: {debug_msg}\nTraceback: {tb}"
+    print(STARTUP_ERROR) 
     db_pool = None
 
 @contextmanager
 def get_db_connection():
-    # Check for startup error first
     if STARTUP_ERROR:
+        # Raise the detailed diagnostic error to the MCP Client
         raise Exception(STARTUP_ERROR)
     
     if not db_pool:
-        raise Exception("Database pool is not initialized (Unknown Reason).")
+        raise Exception("Pool is None but no startup error captured? This shouldn't happen.")
     
     conn = db_pool.getconn()
     try:
