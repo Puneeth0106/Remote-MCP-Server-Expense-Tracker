@@ -8,13 +8,31 @@ from contextlib import contextmanager
 
 
 
-
 # 1. Load Environment & Config
 load_dotenv()
-DB_URL = os.getenv("DATABASE_URL")
+
+# RAW fetch
+raw_url = os.getenv("DATABASE_URL")
+
+# CLEAN: Strip whitespace AND both single/double quotes
+if raw_url:
+    DB_URL = raw_url.strip().strip("'").strip('"')
+else:
+    DB_URL = None
+
+# Supabase Check: Ensure SSL is enabled if missing
+if DB_URL and "sslmode" not in DB_URL:
+    # Append sslmode=require to ensure Supabase connection works
+    separator = "&" if "?" in DB_URL else "?"
+    DB_URL = f"{DB_URL}{separator}sslmode=require"
+
 CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "resources/categories.json")
 
+# Initialize FastMCP
 mcp = FastMCP("Expense-Tracker")
+
+
+
 
 # 2. Initialize Connection Pool 
 # This prevents opening/closing a handshake for every single request
