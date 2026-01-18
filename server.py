@@ -11,90 +11,45 @@ from contextlib import contextmanager
 # 1. Load Environment & Config
 load_dotenv()
 
-# RAW fetch
-raw_url = os.getenv("DATABASE_URL")
-
-# CLEAN: Strip whitespace AND both single/double quotes
-if raw_url:
-    DB_URL = raw_url.strip().strip("'").strip('"')
-else:
-    DB_URL = None
-
-# Supabase Check: Ensure SSL is enabled if missing
-if DB_URL and "sslmode" not in DB_URL:
-    # Append sslmode=require to ensure Supabase connection works
-    separator = "&" if "?" in DB_URL else "?"
-    DB_URL = f"{DB_URL}{separator}sslmode=require"
-
 CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "resources/categories.json")
 
 # Initialize FastMCP
 mcp = FastMCP("Expense-Tracker")
 
 
-
-
-# ... inside your python file ...
-
-# 2. Initialize Connection Pool (Diagnostic Mode)
-STARTUP_ERROR = None
-db_pool = None
-
+# 2. Initialize Connection Pool (Production Ready)
 try:
-    # DEBUG: Check if the variable even exists
+    # A. Get the raw variable
     raw_url = os.getenv("DATABASE_URL")
     
-    # Validation Logging (Safe - masks the password)
-    if raw_url is None:
-        debug_msg = "DB_URL is NONE (Environment variable not found)"
-    elif raw_url.strip() == "":
-        debug_msg = "DB_URL is Empty String"
-    else:
-        # Show first 15 chars to verify protocol (e.g. 'postgres://...')
-        # and last 15 to verify database name, masking the middle (password)
-        safe_preview = f"{raw_url[:15]}...{raw_url[-15:]}" if len(raw_url) > 30 else "URL_TOO_SHORT"
-        debug_msg = f"DB_URL seems present: {safe_preview}"
-
-    # Clean the URL
+    # B. CLEAN IT: Remove whitespace and quotes (Standardize the string)
     if raw_url:
         DB_URL = raw_url.strip().strip("'").strip('"')
     else:
         DB_URL = None
 
-    if not DB_URL:
-        raise ValueError(f"CRITICAL: Database URL is missing. Debug info: {debug_msg}")
+    # C. FORCE SSL: Supabase REQUIRES this. 
+    # If we don't add it, the connection drops silently (Empty OperationalError).
+    if DB_URL and "sslmode" not in DB_URL:
+        # Check if URL already has query parameters (?)
+        separator = "&" if "?" in DB_URL else "?"
+        DB_URL = f"{DB_URL}{separator}sslmode=require"
 
-    # Attempt Connection
+    # D. Create the Pool
     db_pool = psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
         maxconn=20,
         dsn=DB_URL,
         cursor_factory=RealDictCursor
     )
+    print("Database pool initialized successfully with SSL.")
 
 except Exception as e:
-    # Capture EVERYTHING: Type, Message, and Repr
-    import traceback
-    tb = traceback.format_exc()
-    STARTUP_ERROR = f"DIAGNOSTIC FAILURE:\nType: {type(e).__name__}\nMessage: '{str(e)}'\nDebug Info: {debug_msg}\nTraceback: {tb}"
-    print(STARTUP_ERROR) 
+    # If it still fails, print the modified URL (masked) to see if SSL was added
+    masked_url = DB_URL.replace(DB_URL.split(':')[2].split('@')[0], '******') if DB_URL and '@' in DB_URL else "INVALID_URL"
+    print(f"Startup Failed. Final URL used: {masked_url}")
+    print(f"Error: {e}")
     db_pool = None
-
-@contextmanager
-def get_db_connection():
-    if STARTUP_ERROR:
-        # Raise the detailed diagnostic error to the MCP Client
-        raise Exception(STARTUP_ERROR)
-    
-    if not db_pool:
-        raise Exception("Pool is None but no startup error captured? This shouldn't happen.")
-    
-    conn = db_pool.getconn()
-    try:
-        yield conn
-    finally:
-        db_pool.putconn(conn)
-
 
 # 3. Helper to get user and handle errors centrally
 def ensure_user_identity(user_id):
