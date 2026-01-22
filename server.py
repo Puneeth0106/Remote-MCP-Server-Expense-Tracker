@@ -7,11 +7,173 @@ from fastmcp import FastMCP
 from contextlib import contextmanager
 
 
+#Embedding Categories
+Categories= {
+  "food": [
+    "groceries",
+    "fruits_vegetables",
+    "dairy_bakery",
+    "dining_out",
+    "coffee_tea",
+    "snacks",
+    "delivery_fees",
+    "other"
+  ],
+  "transport": [
+    "fuel",
+    "public_transport",
+    "cab_ride_hailing",
+    "parking",
+    "tolls",
+    "vehicle_service",
+    "other"
+  ],
+  "housing": [
+    "rent",
+    "maintenance_hoa",
+    "property_tax",
+    "repairs_service",
+    "cleaning",
+    "furnishing",
+    "other"
+  ],
+  "utilities": [
+    "electricity",
+    "water",
+    "gas",
+    "internet_broadband",
+    "mobile_phone",
+    "tv_dth",
+    "other"
+  ],
+  "health": [
+    "medicines",
+    "doctor_consultation",
+    "diagnostics_labs",
+    "insurance_health",
+    "fitness_gym",
+    "other"
+  ],
+  "education": [
+    "books",
+    "courses",
+    "online_subscriptions",
+    "exam_fees",
+    "workshops",
+    "other"
+  ],
+  "family_kids": [
+    "school_fees",
+    "daycare",
+    "toys_games",
+    "clothes",
+    "events_birthdays",
+    "other"
+  ],
+  "entertainment": [
+    "movies_events",
+    "streaming_subscriptions",
+    "games_apps",
+    "outing",
+    "other"
+  ],
+  "shopping": [
+    "clothing",
+    "footwear",
+    "accessories",
+    "electronics_gadgets",
+    "appliances",
+    "home_decor",
+    "other"
+  ],
+  "subscriptions": [
+    "saas_tools",
+    "cloud_ai",
+    "newsletters",
+    "music_video",
+    "storage_backup",
+    "other"
+  ],
+  "personal_care": [
+    "salon_spa",
+    "grooming",
+    "cosmetics",
+    "hygiene",
+    "other"
+  ],
+  "gifts_donations": [
+    "gifts_personal",
+    "charity_donation",
+    "festivals",
+    "other"
+  ],
+  "finance_fees": [
+    "bank_charges",
+    "late_fees",
+    "interest",
+    "brokerage",
+    "other"
+  ],
+  "business": [
+    "software_tools",
+    "hosting_domains",
+    "marketing_ads",
+    "contractor_payments",
+    "travel_business",
+    "office_supplies",
+    "other"
+  ],
+  "travel": [
+    "flights",
+    "hotels",
+    "train_bus",
+    "visa_passport",
+    "local_transport",
+    "food_travel",
+    "other"
+  ],
+  "home": [
+    "household_supplies",
+    "cleaning_supplies",
+    "kitchenware",
+    "small_repairs",
+    "pest_control",
+    "other"
+  ],
+  "pet": [
+    "food",
+    "vet",
+    "grooming",
+    "supplies",
+    "other"
+  ],
+  "taxes": [
+    "income_tax",
+    "gst",
+    "professional_tax",
+    "filing_fees",
+    "other"
+  ],
+  "investments": [
+    "mutual_funds",
+    "stocks",
+    "fd_rd",
+    "gold",
+    "crypto",
+    "brokerage_fees",
+    "other"
+  ],
+  "misc": [
+    "uncategorized",
+    "rounding",
+    "other"
+  ]
+}
+
+
 
 # 1. Load Environment & Config
 load_dotenv()
-
-CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "resources/categories.json")
 
 # Initialize FastMCP
 mcp = FastMCP("Expense-Tracker")
@@ -38,10 +200,10 @@ try:
         separator = "&" if "?" in DB_URL else "?"
         DB_URL = f"{DB_URL}{separator}sslmode=require"
 
-    # Create Pool
+    # Create Pool (optimized for cloud deployment)
     db_pool = psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
-        maxconn=20,
+        maxconn=5,  # Reduced for cloud environments to avoid connection exhaustion
         dsn=DB_URL,
         cursor_factory=RealDictCursor
     )
@@ -286,17 +448,16 @@ def update_expense(
 
 @mcp.resource("expense://categories", mime_type="application/json")
 def categories():
-    """Resource: Expense Categories"""
-    if not os.path.exists(CATEGORIES_PATH):
-        return '{"error": "Categories file not found", "path": "' + CATEGORIES_PATH + '"}'
-        
-    with open(CATEGORIES_PATH, 'r') as f:
-        return f.read()
+    """Resource: Expense Categories (embedded for cloud deployment)"""
+    import json
+    return json.dumps(Categories, indent=2)
 
+# For local development only
 if __name__ == "__main__":
-    # Ensure pool is closed on exit (optional but good practice)
+    # FastMCP cloud will handle server configuration automatically
+    # This block is only for local testing
     try:
-        mcp.run(transport="http", port=8000, host="0.0.0.0")
+        mcp.run()
     finally:
         if db_pool:
             db_pool.closeall()
