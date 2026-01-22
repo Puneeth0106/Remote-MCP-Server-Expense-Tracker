@@ -210,9 +210,10 @@ try:
     print("Database pool initialized successfully.")
 
 except Exception as e:
-    # CAPTURE the specific error so we can show it to the user
-    STARTUP_ERROR = f"Startup Failed: {str(e)}"
-    print(STARTUP_ERROR) # Print to logs too
+    # Capture the specific error with its type to avoid blank messages
+    error_detail = str(e).strip() or repr(e)
+    STARTUP_ERROR = f"Startup Failed: {e.__class__.__name__}: {error_detail}"
+    print(STARTUP_ERROR)  # Print to logs too
     db_pool = None
 
 @contextmanager
