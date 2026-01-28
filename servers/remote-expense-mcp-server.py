@@ -7,42 +7,233 @@ from fastmcp import FastMCP
 from contextlib import contextmanager
 
 
+#Embedding Categories
+Categories= {
+  "food": [
+    "groceries",
+    "fruits_vegetables",
+    "dairy_bakery",
+    "dining_out",
+    "coffee_tea",
+    "snacks",
+    "delivery_fees",
+    "other"
+  ],
+  "transport": [
+    "fuel",
+    "public_transport",
+    "cab_ride_hailing",
+    "parking",
+    "tolls",
+    "vehicle_service",
+    "other"
+  ],
+  "housing": [
+    "rent",
+    "maintenance_hoa",
+    "property_tax",
+    "repairs_service",
+    "cleaning",
+    "furnishing",
+    "other"
+  ],
+  "utilities": [
+    "electricity",
+    "water",
+    "gas",
+    "internet_broadband",
+    "mobile_phone",
+    "tv_dth",
+    "other"
+  ],
+  "health": [
+    "medicines",
+    "doctor_consultation",
+    "diagnostics_labs",
+    "insurance_health",
+    "fitness_gym",
+    "other"
+  ],
+  "education": [
+    "books",
+    "courses",
+    "online_subscriptions",
+    "exam_fees",
+    "workshops",
+    "other"
+  ],
+  "family_kids": [
+    "school_fees",
+    "daycare",
+    "toys_games",
+    "clothes",
+    "events_birthdays",
+    "other"
+  ],
+  "entertainment": [
+    "movies_events",
+    "streaming_subscriptions",
+    "games_apps",
+    "outing",
+    "other"
+  ],
+  "shopping": [
+    "clothing",
+    "footwear",
+    "accessories",
+    "electronics_gadgets",
+    "appliances",
+    "home_decor",
+    "other"
+  ],
+  "subscriptions": [
+    "saas_tools",
+    "cloud_ai",
+    "newsletters",
+    "music_video",
+    "storage_backup",
+    "other"
+  ],
+  "personal_care": [
+    "salon_spa",
+    "grooming",
+    "cosmetics",
+    "hygiene",
+    "other"
+  ],
+  "gifts_donations": [
+    "gifts_personal",
+    "charity_donation",
+    "festivals",
+    "other"
+  ],
+  "finance_fees": [
+    "bank_charges",
+    "late_fees",
+    "interest",
+    "brokerage",
+    "other"
+  ],
+  "business": [
+    "software_tools",
+    "hosting_domains",
+    "marketing_ads",
+    "contractor_payments",
+    "travel_business",
+    "office_supplies",
+    "other"
+  ],
+  "travel": [
+    "flights",
+    "hotels",
+    "train_bus",
+    "visa_passport",
+    "local_transport",
+    "food_travel",
+    "other"
+  ],
+  "home": [
+    "household_supplies",
+    "cleaning_supplies",
+    "kitchenware",
+    "small_repairs",
+    "pest_control",
+    "other"
+  ],
+  "pet": [
+    "food",
+    "vet",
+    "grooming",
+    "supplies",
+    "other"
+  ],
+  "taxes": [
+    "income_tax",
+    "gst",
+    "professional_tax",
+    "filing_fees",
+    "other"
+  ],
+  "investments": [
+    "mutual_funds",
+    "stocks",
+    "fd_rd",
+    "gold",
+    "crypto",
+    "brokerage_fees",
+    "other"
+  ],
+  "misc": [
+    "uncategorized",
+    "rounding",
+    "other"
+  ]
+}
+
+
+
 # 1. Load Environment & Config
 load_dotenv()
-DB_URL = os.getenv("DATABASE_URL")
-CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "resources/categories.json")
 
+# Initialize FastMCP
 mcp = FastMCP("Expense-Tracker")
 
-# 2. Initialize Connection Pool 
-# This prevents opening/closing a handshake for every single request
+# Global variable to store why the connection failed
+STARTUP_ERROR = None
+db_pool = None
+
+# 2. Initialize Connection Pool
 try:
+    raw_url = os.getenv("DATABASE_URL")
+    
+    # Clean and Validate URL
+    if raw_url:
+        DB_URL = raw_url.strip().strip("'").strip('"')
+    else:
+        DB_URL = None
+
+    if not DB_URL:
+        raise ValueError("DATABASE_URL environment variable is missing or empty.")
+
+    # Force SSL for Supabase
+    if "sslmode" not in DB_URL:
+        separator = "&" if "?" in DB_URL else "?"
+        DB_URL = f"{DB_URL}{separator}sslmode=require"
+
+    # Create Pool (optimized for cloud deployment)
     db_pool = psycopg2.pool.ThreadedConnectionPool(
         minconn=1,
-        maxconn=20,
+        maxconn=5,  # Reduced for cloud environments to avoid connection exhaustion
         dsn=DB_URL,
         cursor_factory=RealDictCursor
     )
+    print("Database pool initialized successfully.")
+
 except Exception as e:
-    print(f"Error creating connection pool: {e}")
+    # Capture the specific error with its type to avoid blank messages
+    error_detail = str(e).strip() or repr(e)
+    STARTUP_ERROR = f"Startup Failed: {e.__class__.__name__}: {error_detail}"
+    print(STARTUP_ERROR)  # Print to logs too
     db_pool = None
 
 @contextmanager
 def get_db_connection():
     """
     Context manager to get a connection from the pool and return it safely.
-    This ensures connections are never leaked, even if code crashes.
     """
+    # 1. Check if we have a specific startup error to report
+    if STARTUP_ERROR:
+        raise Exception(f"DATABASE ERROR: {STARTUP_ERROR}")
+
+    # 2. Check if pool is missing for unknown reasons
     if not db_pool:
-        raise Exception("Database pool is not initialized.")
+        raise Exception("Database pool is not initialized (Unknown Reason).")
     
     conn = db_pool.getconn()
     try:
         yield conn
     finally:
-        # Put the connection back in the pool so others can use it
         db_pool.putconn(conn)
-
 
 # 3. Helper to get user and handle errors centrally
 def ensure_user_identity(user_id):
@@ -59,7 +250,12 @@ def ensure_user_identity(user_id):
 @mcp.tool()
 def add_expense(date: str, amount: float, category: str, subcategory: str = '', note: str = '', user_id: str = 'guest'):
     """Add a new expense. User ID defaults to guest."""
+
+    # 1. Check Identity
     identity_error = ensure_user_identity(user_id)
+    if identity_error:
+        return identity_error  
+    
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -81,7 +277,12 @@ def add_expense(date: str, amount: float, category: str, subcategory: str = '', 
 @mcp.tool()
 def list_expenses(start_date: str, end_date: str, user_id: str = 'guest'):
     """List expenses for a specific date range."""
+
+    # 1. Check Identity
     identity_error = ensure_user_identity(user_id)
+    if identity_error:
+        return identity_error
+    
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -108,7 +309,11 @@ def summarize_expenses(start_date: str, end_date: str, category: str | None = No
     """
     Summarize expenses with optional category filter.
     """
+    # 1. Check Identity
     identity_error = ensure_user_identity(user_id)
+    if identity_error:
+        return identity_error
+    
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -138,7 +343,11 @@ def summarize_expenses(start_date: str, end_date: str, category: str | None = No
 @mcp.tool()
 def delete_expense(expense_id: int, user_id: str = 'guest'):
     """Delete an expense by ID."""
+    # 1. Check Identity
     identity_error = ensure_user_identity(user_id)
+    if identity_error:
+        return identity_error
+    
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -177,7 +386,10 @@ def update_expense(
     Update an expense by ID.
     Only fields that are provided will be updated.
     """
+    # 1. Check Identity
     identity_error = ensure_user_identity(user_id)
+    if identity_error:
+        return identity_error
     try:
         # 1. Clean up inputs (remove accidentally added quotes)
         date = clean_input(date)
@@ -237,17 +449,16 @@ def update_expense(
 
 @mcp.resource("expense://categories", mime_type="application/json")
 def categories():
-    """Resource: Expense Categories"""
-    if not os.path.exists(CATEGORIES_PATH):
-        return '{"error": "Categories file not found", "path": "' + CATEGORIES_PATH + '"}'
-        
-    with open(CATEGORIES_PATH, 'r') as f:
-        return f.read()
+    """Resource: Expense Categories (embedded for cloud deployment)"""
+    import json
+    return json.dumps(Categories, indent=2)
 
+# For local development only
 if __name__ == "__main__":
-    # Ensure pool is closed on exit (optional but good practice)
+    # FastMCP cloud will handle server configuration automatically
+    # This block is only for local testing
     try:
-        mcp.run(transport="http", port=8000, host="0.0.0.0")
+        mcp.run()
     finally:
         if db_pool:
             db_pool.closeall()

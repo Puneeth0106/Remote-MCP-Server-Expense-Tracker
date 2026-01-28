@@ -27,20 +27,21 @@ initialize_db()
 
 # Adding Tools to MCP
 @mcp.tool()
-def add_expense(date, amount, category, subcategory='',note=''):
+async def add_expense(date, amount, category, subcategory='',note=''):
     """ Add a new expense to the database"""
     with sqlite3.connect(DB_PATH) as conn:
         cursor= conn.cursor()
         cursor.execute(
             "Insert into expenses(date,amount, category, subcategory,note) values(?,?,?,?,?)",
             (date, amount, category, subcategory,note))
+        await conn.commit()
         return {'status':'ok','id':cursor.lastrowid}
 
 
 
 #List Expenses Tool
 @mcp.tool()
-def list_expenses(start_date, end_date):
+async def list_expenses(start_date, end_date):
     """ List Expense within the inclusive Data Range """
     with sqlite3.connect(DB_PATH) as conn:
         cursor= conn.cursor()
@@ -59,7 +60,7 @@ def list_expenses(start_date, end_date):
 
 #Summarize based on category if included
 @mcp.tool()
-def summarize_expenses(start_date,end_date,category=None):
+async def summarize_expenses(start_date,end_date,category=None):
     """Summarize Expenses within the inclusive range and also summarize based on category if provided"""
     with sqlite3.connect(DB_PATH) as conn:
         query=  ("""
@@ -82,7 +83,7 @@ def summarize_expenses(start_date,end_date,category=None):
         return [dict(zip(cols,r)) for r in cursor.fetchall()]
 
 @mcp.tool()
-def delete_expense(id:int):
+async def delete_expense(id:int):
     """ Delete expense from expenses table with given expense id """
     with sqlite3.connect(DB_PATH) as conn:
         cursor= conn.cursor()
@@ -99,7 +100,7 @@ def delete_expense(id:int):
         return {'status':'ok','message':f'Expense {id} deleted successfully'}
     
 @mcp.tool()
-def update_expense(id:int,date:Optional[str] =None, amount:Optional[float] =None, category:Optional[str] =None, subcategory:Optional[str] =None ,note:Optional[str]=None):
+async def update_expense(id:int,date:Optional[str] =None, amount:Optional[float] =None, category:Optional[str] =None, subcategory:Optional[str] =None ,note:Optional[str]=None):
     """Update the expense with provided column values using the id provided """
     with sqlite3.connect(DB_PATH) as conn:
         fields_to_update= []
@@ -122,8 +123,7 @@ def update_expense(id:int,date:Optional[str] =None, amount:Optional[float] =None
             fields_to_update.append("note = ?")
             params.append(note)
         
-        
-        
+        await conn.commit()
         # 2. Safety check: Did the user actually provide anything to update?
         if len(fields_to_update)==0:
             return{'status':'error', 'message':'No fields provided to update'}
@@ -158,7 +158,7 @@ def categories():
 
 
 if __name__ == "__main__":
-    mcp.run()          
+    mcp.run(transport='http',host= '0.0.0.0', port=8000)          
             
             
 
