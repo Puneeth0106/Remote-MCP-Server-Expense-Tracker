@@ -1,3 +1,11 @@
+"""
+Expense Tracker MCP Server with Local SQLite DB
+This server allows users to add, list, summarize, delete, and update expenses
+using a local SQLite database. It also provides a resource endpoint to fetch
+expense categories from a JSON file.
+"""
+
+
 from fastmcp import FastMCP
 import os
 import sqlite3
