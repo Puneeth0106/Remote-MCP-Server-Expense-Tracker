@@ -11,7 +11,7 @@ load_dotenv()
 DB_URL = os.getenv("DATABASE_URL")
 CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), "resources/categories.json")
 
-mcp = FastMCP("Expense-Tracker")
+mcp = FastMCP("Expense-Tracker-Postgres")
 
 # 2. Initialize Connection Pool 
 # This prevents opening/closing a handshake for every single request
